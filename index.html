@@ -846,7 +846,7 @@ function handleMessage(data) {
       document.getElementById('winner-overlay').classList.remove('active');
       rematchRequestedByMe = false;
       // host sempre vai primeiro, inverte a cada rematch
-      startGame(isHost);
+      startGame(true);
       break;
   }
 }
@@ -1078,7 +1078,7 @@ function acceptRematch() {
   send({type: 'rematch-accept'});
   document.getElementById('winner-overlay').classList.remove('active');
   rematchRequestedByMe = false;
-  startGame(!isHost);
+  startGame(false);
 }
 
 function showToast(msg) {
