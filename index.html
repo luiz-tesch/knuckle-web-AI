@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knucklebones</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --deep: #0a0806;
+      --felt: #0d1a0f;
+      --felt2: #111f13;
+      --card: #13100a;
+      --border: #2a2318;
+      --red: #8b1a1a;
+      --cream: #e8dfc8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Crimson Text', serif;
+      background-color: var(--deep);
+      color: var(--cream);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .cinzel { font-family: 'Cinzel Decorative', cursive; }
+
+    /* Background felt texture */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px),
+        radial-gradient(ellipse at 50% 50%, #0d1a0f 0%, #06100a 60%, #020804 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .content { position: relative; z-index: 1; }
+
+    /* Gold border glow */
+    .gold-border {
+      border: 1px solid var(--gold);
+      box-shadow: 0 0 12px rgba(201,168,76,0.15), inset 0 0 12px rgba(0,0,0,0.4);
+    }
+
+    .gold-glow {
+      box-shadow: 0 0 20px rgba(201,168,76,0.3), 0 0 60px rgba(201,168,76,0.1);
+    }
+
+    /* Dice */
+    .die {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #f5f0e8 0%, #d4cbb8 100%);
+      border-radius: 10px;
+      border: 2px solid rgba(0,0,0,0.3);
+      box-shadow: 3px 3px 8px rgba(0,0,0,0.6), inset -2px -2px 4px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: #1a1a1a;
+      transition: all 0.2s;
+      cursor: default;
+      position: relative;
+      font-family: 'Cinzel Decorative', cursive;
+    }
+
+    .die.empty {
+      background: rgba(0,0,0,0.3);
+      border: 2px dashed rgba(201,168,76,0.2);
+      box-shadow: none;
+      color: transparent;
+    }
+
+    .die.clickable {
+      cursor: pointer;
+      border-color: var(--gold);
+      box-shadow: 3px 3px 8px rgba(0,0,0,0.6), 0 0 12px rgba(201,168,76,0.4);
+      animation: pulse-gold 1.5s ease-in-out infinite;
+    }
+
+    .die.clickable:hover {
+      transform: scale(1.12) translateY(-3px);
+      box-shadow: 3px 3px 12px rgba(0,0,0,0.8), 0 0 20px rgba(201,168,76,0.7);
+    }
+
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 3px 3px 8px rgba(0,0,0,0.6), 0 0 8px rgba(201,168,76,0.3); }
+      50% { box-shadow: 3px 3px 8px rgba(0,0,0,0.6), 0 0 18px rgba(201,168,76,0.6); }
+    }
+
+    .die.rolling {
+      animation: roll-anim 0.6s ease-out;
+    }
+
+    @keyframes roll-anim {
+      0% { transform: rotate(0deg) scale(0.5); opacity: 0; }
+      50% { transform: rotate(180deg) scale(1.2); opacity: 0.8; }
+      100% { transform: rotate(360deg) scale(1); opacity: 1; }
+    }
+
+    /* Score badge per column */
+    .col-score {
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 0.75rem;
+      color: var(--gold-light);
+      text-align: center;
+      min-width: 56px;
+      margin-bottom: 4px;
+      min-height: 18px;
+    }
+
+    /* Board column */
+    .board-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .board-col.selectable:hover .die.empty {
+      border-color: rgba(201,168,76,0.5);
+      background: rgba(201,168,76,0.05);
+    }
+
+    /* Rolling die animation */
+    .rolling-die {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #f5f0e8, #d4cbb8);
+      border-radius: 10px;
+      border: 3px solid var(--gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: #1a1a1a;
+      font-family: 'Cinzel Decorative', cursive;
+      box-shadow: 0 0 25px rgba(201,168,76,0.6);
+      animation: float 2s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50% { transform: translateY(-8px) rotate(5deg); }
+    }
+
+    /* Screen transitions */
+    .screen {
+      display: none;
+      animation: fadeIn 0.4s ease;
+    }
+    .screen.active { display: flex; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Input styling */
+    .game-input {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(201,168,76,0.4);
+      color: var(--cream);
+      padding: 10px 16px;
+      font-family: 'Crimson Text', serif;
+      font-size: 1.1rem;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+
+    .game-input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 10px rgba(201,168,76,0.2);
+    }
+
+    .game-input::placeholder { color: rgba(232,223,200,0.3); }
+
+    /* Button */
+    .btn-gold {
+      background: linear-gradient(135deg, #c9a84c, #a07830);
+      color: #0a0806;
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 12px 28px;
+      border: none;
+      cursor: pointer;
+      letter-spacing: 0.1em;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-gold::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.4s;
+    }
+
+    .btn-gold:hover::before { left: 100%; }
+    .btn-gold:hover { box-shadow: 0 0 20px rgba(201,168,76,0.5); transform: translateY(-1px); }
+    .btn-gold:active { transform: translateY(0); }
+    .btn-gold:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--gold);
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 10px 24px;
+      border: 1px solid var(--gold);
+      cursor: pointer;
+      letter-spacing: 0.08em;
+      transition: all 0.2s;
+    }
+
+    .btn-outline:hover {
+      background: rgba(201,168,76,0.1);
+      box-shadow: 0 0 12px rgba(201,168,76,0.3);
+    }
+
+    /* Status message */
+    .status-msg {
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-align: center;
+      min-height: 1.5em;
+    }
+
+    /* Score display */
+    .score-display {
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 2rem;
+      color: var(--gold);
+    }
+
+    /* Connection dot */
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .dot.green { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+    .dot.yellow { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; animation: blink 1s infinite; }
+    .dot.red { background: #f87171; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    /* Ornamental divider */
+    .ornament {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(201,168,76,0.4);
+      font-size: 1rem;
+    }
+    .ornament::before, .ornament::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(201,168,76,0.4), transparent);
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-80px);
+      background: var(--card);
+      border: 1px solid var(--gold);
+      padding: 12px 24px;
+      font-family: 'Cinzel Decorative', cursive;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      color: var(--gold-light);
+      z-index: 1000;
+      transition: transform 0.3s ease;
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Turn indicator */
+    .turn-arrow {
+      color: var(--gold);
+      font-size: 1.2rem;
+      animation: bounce 1s infinite;
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    /* Winner overlay */
+    #winner-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 24px;
+    }
+    #winner-overlay.active { display: flex; animation: fadeIn 0.6s ease; }
+
+    .trophy { font-size: 5rem; animation: trophy-anim 1s ease-out; }
+    @keyframes trophy-anim {
+      0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+      70% { transform: scale(1.2) rotate(5deg); }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--deep); }
+    ::-webkit-scrollbar-thumb { background: var(--gold); }
+
+    /* Responsive small dice on mobile */
+    @media (max-width: 480px) {
+      .die, .rolling-die { width: 44px; height: 44px; font-size: 1.1rem; }
+      .col-score { min-width: 44px; font-size: 0.65rem; }
+    }
+  </style>
+</head>
+<body class="content">
+
+<div id="toast"></div>
+
+<!-- Winner Overlay -->
+<div id="winner-overlay">
+  <div class="trophy" id="trophy-emoji">🏆</div>
+  <div class="cinzel text-3xl text-yellow-300" id="winner-text"></div>
+  <div class="text-lg text-yellow-100" id="winner-scores"></div>
+  <button class="btn-gold mt-4" onclick="resetGame()">JOGAR NOVAMENTE</button>
+</div>
+
+<!-- LOBBY SCREEN -->
+<div id="screen-lobby" class="screen active flex-col items-center justify-center min-h-screen p-6 gap-8">
+
+  <div class="text-center">
+    <div class="text-yellow-400 text-xs tracking-widest mb-2 opacity-60">⚔ JOGO DE DADOS ⚔</div>
+    <h1 class="cinzel text-5xl md:text-6xl font-black text-yellow-400 leading-none" style="text-shadow: 0 0 40px rgba(201,168,76,0.5)">
+      KNUCKLE<br>BONES
+    </h1>
+    <div class="ornament mt-4 text-yellow-700">✦</div>
+  </div>
+
+  <div class="gold-border bg-black bg-opacity-40 p-8 w-full max-w-sm flex flex-col gap-6">
+    
+    <!-- Name -->
+    <div>
+      <label class="cinzel text-xs text-yellow-600 tracking-widest block mb-2">SEU NOME</label>
+      <input id="player-name" type="text" maxlength="16" placeholder="Como você se chama?" class="game-input" />
+    </div>
+
+    <div class="ornament text-yellow-800 text-xs">ou</div>
+
+    <!-- Create Room -->
+    <div class="flex flex-col gap-3">
+      <button class="btn-gold" onclick="createRoom()">✦ CRIAR SALA PRIVADA</button>
+    </div>
+
+    <div class="ornament text-yellow-800 text-xs">ou</div>
+
+    <!-- Join Room -->
+    <div class="flex flex-col gap-3">
+      <label class="cinzel text-xs text-yellow-600 tracking-widest block mb-1">CÓDIGO DA SALA</label>
+      <input id="room-code" type="text" maxlength="8" placeholder="Ex: AB3X" class="game-input" style="text-transform:uppercase;letter-spacing:0.2em;text-align:center;font-size:1.3rem;" />
+      <button class="btn-outline" onclick="joinRoom()">ENTRAR NA SALA →</button>
+    </div>
+
+  </div>
+
+  <div class="text-center text-yellow-900 text-sm max-w-xs">
+    Jogo local P2P — compartilhe o código com seu amigo. Sem servidores externos.
+  </div>
+</div>
+
+<!-- WAITING SCREEN -->
+<div id="screen-waiting" class="screen flex-col items-center justify-center min-h-screen p-6 gap-8">
+  
+  <h2 class="cinzel text-3xl text-yellow-400">SALA CRIADA</h2>
+  
+  <div class="gold-border bg-black bg-opacity-40 p-10 text-center flex flex-col gap-6">
+    <div class="text-yellow-600 cinzel text-xs tracking-widest">CÓDIGO DA SALA</div>
+    <div class="cinzel text-6xl text-yellow-300 font-black tracking-widest" id="display-room-code" style="text-shadow: 0 0 20px rgba(201,168,76,0.6)"></div>
+    <button class="btn-outline text-xs" onclick="copyCode()">📋 COPIAR CÓDIGO</button>
+    <div class="ornament text-yellow-800">✦</div>
+    <div class="status-msg text-yellow-500">
+      <span class="dot yellow"></span>Aguardando oponente entrar...
+    </div>
+  </div>
+
+  <button class="btn-outline text-xs opacity-50" onclick="backToLobby()">← VOLTAR</button>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="screen-game" class="screen flex-col items-center justify-start min-h-screen p-4 gap-3">
+
+  <!-- Header -->
+  <div class="w-full max-w-lg flex items-center justify-between mt-2">
+    <div class="cinzel text-xs text-yellow-700 tracking-widest">KNUCKLEBONES</div>
+    <div class="cinzel text-xs text-yellow-700 tracking-widest" id="room-label"></div>
+  </div>
+
+  <!-- Opponent Board (top) -->
+  <div class="w-full max-w-lg">
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-2">
+        <span class="dot green" id="opp-dot"></span>
+        <span class="cinzel text-sm text-yellow-400" id="opp-name-display">Oponente</span>
+      </div>
+      <div class="score-display text-2xl" id="opp-score">0</div>
+    </div>
+
+    <!-- Opponent grid (cols go left-right, rows bottom-to-top visually = index 2,1,0) -->
+    <div class="gold-border bg-black bg-opacity-30 p-4 rounded">
+      <div class="flex justify-center gap-3" id="opp-board">
+        <!-- generated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Center: turn info + rolling die -->
+  <div class="flex flex-col items-center gap-2 py-1">
+    <div class="status-msg text-yellow-400" id="turn-status"></div>
+    <div id="rolling-die-container"></div>
+    <div class="status-msg text-yellow-600 text-xs" id="sub-status"></div>
+  </div>
+
+  <!-- My Board (bottom) -->
+  <div class="w-full max-w-lg">
+    <div class="gold-border bg-black bg-opacity-30 p-4 rounded">
+      <div class="flex justify-center gap-3" id="my-board">
+        <!-- generated by JS -->
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between mt-2">
+      <div class="flex items-center gap-2">
+        <span class="dot green"></span>
+        <span class="cinzel text-sm text-yellow-400" id="my-name-display">Você</span>
+      </div>
+      <div class="score-display text-2xl" id="my-score">0</div>
+    </div>
+  </div>
+
+  <!-- Rules reminder -->
+  <div class="w-full max-w-lg text-center text-yellow-900 text-xs mt-1 cinzel" style="letter-spacing:0.05em">
+    DADOS IGUAIS NA MESMA COLUNA MULTIPLICAM • MESMO NÚM. CANCELA DO OPONENTE
+  </div>
+
+</div>
+
+<script>
+// ─── GAME STATE ───────────────────────────────────────────────
+const COLS = 3, ROWS = 3;
+
+let myName = '';
+let oppName = '';
+let myBoard = [];   // [col][row]
+let oppBoard = [];
+let myTurn = false;
+let currentDie = null;  // die value I rolled
+let peer = null;
+let conn = null;
+let isHost = false;
+let roomCode = '';
+let gameStarted = false;
+
+function initBoards() {
+  myBoard = Array.from({length: COLS}, () => Array(ROWS).fill(null));
+  oppBoard = Array.from({length: COLS}, () => Array(ROWS).fill(null));
+}
+
+// ─── PEER SETUP ───────────────────────────────────────────────
+function getPeerID(code) { return 'knuckle-' + code.toUpperCase(); }
+
+function createRoom() {
+  const name = document.getElementById('player-name').value.trim() || 'Jogador 1';
+  myName = name;
+  // Generate 4-char code
+  roomCode = Math.random().toString(36).substring(2,6).toUpperCase();
+  isHost = true;
+
+  showScreen('waiting');
+  document.getElementById('display-room-code').textContent = roomCode;
+  document.getElementById('room-label').textContent = 'Sala: ' + roomCode;
+
+  peer = new Peer(getPeerID(roomCode), {debug: 0});
+  peer.on('open', () => {
+    // wait for connection
+    peer.on('connection', (c) => {
+      conn = c;
+      setupConn();
+    });
+  });
+  peer.on('error', (e) => showToast('Erro: ' + e.type));
+}
+
+function joinRoom() {
+  const code = document.getElementById('room-code').value.trim().toUpperCase();
+  const name = document.getElementById('player-name').value.trim() || 'Jogador 2';
+  if (!code || code.length < 3) { showToast('Digite o código da sala'); return; }
+  myName = name;
+  roomCode = code;
+  isHost = false;
+
+  showScreen('waiting');
+  document.getElementById('display-room-code').textContent = code;
+  document.getElementById('room-label').textContent = 'Sala: ' + code;
+  document.getElementById('display-room-code').style.fontSize = '2rem';
+
+  peer = new Peer(undefined, {debug: 0});
+  peer.on('open', (id) => {
+    conn = peer.connect(getPeerID(code));
+    setupConn();
+  });
+  peer.on('error', (e) => {
+    showToast('Sala não encontrada ou erro de conexão');
+    backToLobby();
+  });
+}
+
+function setupConn() {
+  conn.on('open', () => {
+    // Exchange names
+    send({type: 'hello', name: myName});
+  });
+
+  conn.on('data', (data) => {
+    handleMessage(data);
+  });
+
+  conn.on('close', () => {
+    if (gameStarted) showToast('Oponente desconectou');
+  });
+}
+
+function send(obj) {
+  if (conn && conn.open) conn.send(obj);
+}
+
+// ─── MESSAGE HANDLING ─────────────────────────────────────────
+function handleMessage(data) {
+  switch(data.type) {
+    case 'hello':
+      oppName = data.name;
+      document.getElementById('opp-name-display').textContent = oppName;
+      if (isHost) {
+        send({type: 'start', oppName: myName});
+        startGame(true);  // host goes first
+      }
+      break;
+    case 'start':
+      oppName = data.oppName; // host name
+      document.getElementById('opp-name-display').textContent = oppName;
+      startGame(false);
+      break;
+    case 'rolled':
+      // Opponent rolled, show their die
+      oppRolled(data.value);
+      break;
+    case 'placed':
+      oppPlaced(data.col, data.value);
+      break;
+    case 'sync':
+      // full board sync
+      oppBoard = data.board;
+      renderBoards();
+      break;
+  }
+}
+
+// ─── GAME LOGIC ───────────────────────────────────────────────
+function startGame(goFirst) {
+  initBoards();
+  gameStarted = true;
+  myTurn = goFirst;
+  currentDie = null;
+
+  document.getElementById('my-name-display').textContent = myName;
+  document.getElementById('opp-name-display').textContent = oppName;
+  document.getElementById('room-label').textContent = 'Sala: ' + roomCode;
+
+  showScreen('game');
+  renderBoards();
+  updateTurnUI();
+
+  if (myTurn) {
+    setTimeout(rollMyDie, 600);
+  }
+}
+
+function rollMyDie() {
+  if (!myTurn || currentDie !== null) return;
+  // Animate roll
+  const val = Math.ceil(Math.random() * 6);
+  currentDie = val;
+  
+  animateRoll(val, () => {
+    showRollingDie(val);
+    updateTurnUI();
+    highlightColumns();
+    send({type: 'rolled', value: val});
+  });
+}
+
+function animateRoll(val, cb) {
+  const container = document.getElementById('rolling-die-container');
+  container.innerHTML = `<div class="rolling-die">?</div>`;
+  let count = 0;
+  const interval = setInterval(() => {
+    container.querySelector('.rolling-die').textContent = Math.ceil(Math.random()*6);
+    count++;
+    if (count > 8) {
+      clearInterval(interval);
+      cb();
+    }
+  }, 60);
+}
+
+function showRollingDie(val) {
+  const container = document.getElementById('rolling-die-container');
+  container.innerHTML = `<div class="rolling-die">${val}</div>`;
+}
+
+function clearRollingDie() {
+  document.getElementById('rolling-die-container').innerHTML = '';
+}
+
+function oppRolled(val) {
+  // Just show a face-down or show their die value (friendly)
+  const container = document.getElementById('rolling-die-container');
+  container.innerHTML = `<div class="rolling-die" style="filter:grayscale(0.5);border-color:#666">${val}</div>`;
+  document.getElementById('sub-status').textContent = oppName + ' está escolhendo...';
+}
+
+function highlightColumns() {
+  const boardEl = document.getElementById('my-board');
+  boardEl.querySelectorAll('.board-col').forEach((col, i) => {
+    const rows = myBoard[i];
+    const hasFree = rows.some(r => r === null);
+    if (hasFree) {
+      col.classList.add('selectable');
+      col.style.cursor = 'pointer';
+      col.onclick = () => placeInColumn(i);
+    }
+  });
+}
+
+function removeHighlights() {
+  const boardEl = document.getElementById('my-board');
+  boardEl.querySelectorAll('.board-col').forEach(col => {
+    col.classList.remove('selectable');
+    col.style.cursor = 'default';
+    col.onclick = null;
+  });
+}
+
+function placeInColumn(colIdx) {
+  if (!myTurn || currentDie === null) return;
+  const col = myBoard[colIdx];
+  const emptyRow = col.findIndex(r => r === null);
+  if (emptyRow === -1) { showToast('Coluna cheia!'); return; }
+
+  col[emptyRow] = currentDie;
+  const val = currentDie;
+  currentDie = null;
+  myTurn = false;
+  removeHighlights();
+  clearRollingDie();
+
+  // Cancel opponent dice in same column
+  cancelOppDice(colIdx, val);
+
+  send({type: 'placed', col: colIdx, value: val});
+  // Send full board sync
+  send({type: 'sync', board: myBoard});
+
+  renderBoards();
+  checkWin();
+
+  if (!isGameOver()) {
+    myTurn = false;
+    updateTurnUI();
+  }
+}
+
+function oppPlaced(colIdx, val) {
+  const col = oppBoard[colIdx];
+  const emptyRow = col.findIndex(r => r === null);
+  if (emptyRow !== -1) col[emptyRow] = val;
+
+  // Cancel MY dice in that column (from opp's perspective, their col maps to my same col)
+  cancelMyDice(colIdx, val);
+
+  clearRollingDie();
+  renderBoards();
+
+  myTurn = true;
+  updateTurnUI();
+
+  if (!checkWin()) {
+    setTimeout(rollMyDie, 500);
+  }
+}
+
+function cancelOppDice(colIdx, val) {
+  // Remove all opponent dice of value 'val' in column colIdx
+  oppBoard[colIdx] = oppBoard[colIdx].map(d => d === val ? null : d);
+  // Compact nulls to bottom
+  compactCol(oppBoard[colIdx]);
+}
+
+function cancelMyDice(colIdx, val) {
+  myBoard[colIdx] = myBoard[colIdx].map(d => d === val ? null : d);
+  compactCol(myBoard[colIdx]);
+}
+
+function compactCol(col) {
+  // Move all non-null to front
+  const vals = col.filter(v => v !== null);
+  for (let i = 0; i < ROWS; i++) col[i] = vals[i] ?? null;
+}
+
+function calcColScore(col) {
+  const filled = col.filter(v => v !== null);
+  if (filled.length === 0) return 0;
+  // Group by value
+  const counts = {};
+  filled.forEach(v => counts[v] = (counts[v] || 0) + 1);
+  return Object.entries(counts).reduce((sum, [v, c]) => sum + parseInt(v) * c * c, 0);
+}
+
+function calcTotalScore(board) {
+  return board.reduce((sum, col) => sum + calcColScore(col), 0);
+}
+
+function isGameOver() {
+  const myFull = myBoard.every(col => col.every(r => r !== null));
+  const oppFull = oppBoard.every(col => col.every(r => r !== null));
+  return myFull || oppFull;
+}
+
+function checkWin() {
+  if (!isGameOver()) return false;
+  const myScore = calcTotalScore(myBoard);
+  const oppScore = calcTotalScore(oppBoard);
+
+  let winner, emoji;
+  if (myScore > oppScore) { winner = myName + ' VENCEU!'; emoji = '🏆'; }
+  else if (oppScore > myScore) { winner = oppName + ' VENCEU!'; emoji = '💀'; }
+  else { winner = 'EMPATE!'; emoji = '🤝'; }
+
+  setTimeout(() => showWinner(emoji, winner, myScore, oppScore), 600);
+  return true;
+}
+
+function showWinner(emoji, text, myScore, oppScore) {
+  document.getElementById('trophy-emoji').textContent = emoji;
+  document.getElementById('winner-text').textContent = text;
+  document.getElementById('winner-scores').textContent = `${myName}: ${myScore}  •  ${oppName}: ${oppScore}`;
+  document.getElementById('winner-overlay').classList.add('active');
+}
+
+function updateTurnUI() {
+  const turnEl = document.getElementById('turn-status');
+  const subEl = document.getElementById('sub-status');
+  const myScore = calcTotalScore(myBoard);
+  const oppScore = calcTotalScore(oppBoard);
+  document.getElementById('my-score').textContent = myScore;
+  document.getElementById('opp-score').textContent = oppScore;
+
+  if (myTurn) {
+    if (currentDie !== null) {
+      turnEl.textContent = '▼ Escolha uma coluna';
+      turnEl.style.color = '#e8c97a';
+      subEl.textContent = '';
+    } else {
+      turnEl.textContent = '▼ Sua vez';
+      turnEl.style.color = '#e8c97a';
+      subEl.textContent = '';
+    }
+  } else {
+    turnEl.textContent = 'Vez de ' + oppName;
+    turnEl.style.color = '#888';
+    subEl.textContent = '';
+  }
+}
+
+// ─── RENDERING ───────────────────────────────────────────────
+function renderBoards() {
+  renderBoard('my-board', myBoard, true);
+  renderBoard('opp-board', oppBoard, false);
+  updateTurnUI();
+}
+
+function renderBoard(id, board, isMe) {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+
+  for (let c = 0; c < COLS; c++) {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'board-col';
+    colDiv.dataset.col = c;
+
+    // Column score
+    const scoreDiv = document.createElement('div');
+    scoreDiv.className = 'col-score';
+    const cs = calcColScore(board[c]);
+    scoreDiv.textContent = cs > 0 ? cs : '';
+
+    if (!isMe) {
+      // Opponent: score on top, dice below (rows 0,1,2 top-to-bottom)
+      colDiv.appendChild(scoreDiv);
+      for (let r = ROWS - 1; r >= 0; r--) {
+        colDiv.appendChild(makeDie(board[c][r], false));
+      }
+    } else {
+      // Me: dice rows 2,1,0 top-to-bottom, score below
+      for (let r = ROWS - 1; r >= 0; r--) {
+        colDiv.appendChild(makeDie(board[c][r], false));
+      }
+      colDiv.appendChild(scoreDiv);
+    }
+
+    el.appendChild(colDiv);
+  }
+}
+
+function makeDie(val, clickable) {
+  const d = document.createElement('div');
+  if (val === null) {
+    d.className = 'die empty';
+    d.textContent = '';
+  } else {
+    d.className = 'die';
+    d.textContent = val;
+    // Color tint based on value
+    if (val >= 5) d.style.background = 'linear-gradient(135deg, #fef3c7, #fde68a)';
+    else if (val >= 3) d.style.background = 'linear-gradient(135deg, #f5f0e8, #d4cbb8)';
+    else d.style.background = 'linear-gradient(135deg, #e8e0d0, #c8bfaa)';
+  }
+  return d;
+}
+
+// ─── UI HELPERS ──────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(roomCode).then(() => showToast('Código copiado!')).catch(() => {
+    prompt('Copie o código:', roomCode);
+  });
+}
+
+function backToLobby() {
+  if (peer) { try { peer.destroy(); } catch(e){} peer = null; }
+  conn = null;
+  gameStarted = false;
+  showScreen('lobby');
+}
+
+function resetGame() {
+  document.getElementById('winner-overlay').classList.remove('active');
+  // Full reset - back to lobby
+  backToLobby();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Room code input auto-uppercase
+document.getElementById('room-code').addEventListener('input', function() {
+  this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+});
+
+// Enter key
+document.getElementById('room-code').addEventListener('keydown', e => { if(e.key==='Enter') joinRoom(); });
+document.getElementById('player-name').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('room-code').focus(); });
+</script>
+</body>
+</html>
