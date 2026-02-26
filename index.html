@@ -72,7 +72,7 @@
       letter-spacing: 0.3em;
       color: rgba(201,168,76,0.6);
       text-align: center;
-      margin-bottom: 8px;
+      margin-bottom: 18px;
     }
 
     .title-main {
@@ -537,7 +537,12 @@
   <div class="trophy" id="trophy-emoji">🏆</div>
   <div class="winner-title" id="winner-text"></div>
   <div class="winner-scores" id="winner-scores"></div>
-  <button class="btn-gold" style="width:auto;margin-top:8px" onclick="resetGame()">JOGAR NOVAMENTE</button>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:8px">
+    <button class="btn-gold" style="width:auto" onclick="requestRematch()">⚔ REVANCHE</button>
+    <div id="rematch-status" style="font-family:'Cinzel Decorative',cursive;font-size:0.6rem;letter-spacing:0.1em;color:#e8c97a;min-height:1.2em"></div>
+    <button id="rematch-btn-opp" class="btn-outline" style="width:auto;display:none" onclick="acceptRematch()">✓ ACEITAR REVANCHE</button>
+    <button class="btn-outline sm" style="width:auto" onclick="resetGame()">← SAIR</button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -670,6 +675,98 @@ let myBoard = [], oppBoard = [];
 let myTurn = false, currentDie = null;
 let peer = null, conn = null;
 let isHost = false, roomCode = '', gameStarted = false;
+let rematchRequestedByMe = false;
+
+// ── AUDIO ─────────────────────────────────────────────────────
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+  if (AC.state === 'suspended') AC.resume();
+  const g = AC.createGain();
+  g.connect(AC.destination);
+
+  if (type === 'roll') {
+    // Rattle curto — dado girando
+    for (let i = 0; i < 4; i++) {
+      const o = AC.createOscillator();
+      const og = AC.createGain();
+      o.connect(og); og.connect(AC.destination);
+      o.type = 'square';
+      o.frequency.setValueAtTime(180 + Math.random()*120, AC.currentTime + i*0.07);
+      og.gain.setValueAtTime(0.08, AC.currentTime + i*0.07);
+      og.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + i*0.07 + 0.06);
+      o.start(AC.currentTime + i*0.07);
+      o.stop(AC.currentTime + i*0.07 + 0.07);
+    }
+  }
+
+  if (type === 'place') {
+    // Clique sólido — dado pousando na mesa
+    const o = AC.createOscillator();
+    const og = AC.createGain();
+    o.connect(og); og.connect(AC.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(260, AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(80, AC.currentTime + 0.08);
+    og.gain.setValueAtTime(0.3, AC.currentTime);
+    og.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.12);
+    o.start(AC.currentTime);
+    o.stop(AC.currentTime + 0.13);
+  }
+
+  if (type === 'cancel') {
+    // Estalo agressivo — dado do oponente sendo removido
+    const bufSize = AC.sampleRate * 0.12;
+    const buf = AC.createBuffer(1, bufSize, AC.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random()*2-1) * (1 - i/bufSize);
+    const src = AC.createBufferSource();
+    const filter = AC.createBiquadFilter();
+    const og = AC.createGain();
+    src.buffer = buf;
+    filter.type = 'bandpass';
+    filter.frequency.value = 800;
+    filter.Q.value = 0.8;
+    src.connect(filter); filter.connect(og); og.connect(AC.destination);
+    og.gain.setValueAtTime(0.5, AC.currentTime);
+    og.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.12);
+    src.start(AC.currentTime);
+  }
+
+  if (type === 'win') {
+    // Fanfarra ascendente
+    const notes = [330, 392, 494, 659];
+    notes.forEach((freq, i) => {
+      const o = AC.createOscillator();
+      const og = AC.createGain();
+      o.connect(og); og.connect(AC.destination);
+      o.type = 'triangle';
+      o.frequency.value = freq;
+      og.gain.setValueAtTime(0, AC.currentTime + i*0.12);
+      og.gain.linearRampToValueAtTime(0.25, AC.currentTime + i*0.12 + 0.04);
+      og.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + i*0.12 + 0.3);
+      o.start(AC.currentTime + i*0.12);
+      o.stop(AC.currentTime + i*0.12 + 0.32);
+    });
+  }
+
+  if (type === 'lose') {
+    // Descendente triste
+    const notes = [330, 277, 220];
+    notes.forEach((freq, i) => {
+      const o = AC.createOscillator();
+      const og = AC.createGain();
+      o.connect(og); og.connect(AC.destination);
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      og.gain.setValueAtTime(0, AC.currentTime + i*0.18);
+      og.gain.linearRampToValueAtTime(0.15, AC.currentTime + i*0.18 + 0.05);
+      og.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + i*0.18 + 0.35);
+      o.start(AC.currentTime + i*0.18);
+      o.stop(AC.currentTime + i*0.18 + 0.37);
+    });
+  }
+}
 
 function initBoards() {
   myBoard  = Array.from({length: COLS}, () => Array(ROWS).fill(null));
@@ -686,8 +783,8 @@ function checkPeer() {
 
 function createRoom() {
   if (!checkPeer()) return;
-  myName   = document.getElementById('player-name').value.trim() || 'Jogador 1';
-  roomCode = Math.random().toString(36).substring(2,6).toUpperCase();
+  myName = document.getElementById('player-name').value.trim();
+  if (!myName) { showToast('Digite seu nome antes de continuar'); document.getElementById('player-name').focus(); return; }  roomCode = Math.random().toString(36).substring(2,6).toUpperCase();
   isHost   = true;
 
   showScreen('waiting');
@@ -702,7 +799,8 @@ function createRoom() {
 function joinRoom() {
   if (!checkPeer()) return;
   const code = document.getElementById('room-code').value.trim().toUpperCase();
-  myName = document.getElementById('player-name').value.trim() || 'Jogador 2';
+  myName = document.getElementById('player-name').value.trim();
+  if (!myName) { showToast('Digite seu nome antes de continuar'); document.getElementById('player-name').focus(); return; }
   if (!code || code.length < 3) { showToast('Digite o código da sala'); return; }
   roomCode = code; isHost = false;
 
@@ -740,6 +838,16 @@ function handleMessage(data) {
     case 'rolled': oppRolled(data.value); break;
     case 'placed': oppPlaced(data.col, data.value); break;
     case 'sync':   oppBoard = data.board; renderBoards(); break;
+    case 'rematch-request':
+      document.getElementById('rematch-btn-opp').style.display = 'block';
+      document.getElementById('rematch-status').textContent = oppName + ' quer revanche!';
+      break;
+    case 'rematch-accept':
+      document.getElementById('winner-overlay').classList.remove('active');
+      rematchRequestedByMe = false;
+      // host sempre vai primeiro, inverte a cada rematch
+      startGame(isHost);
+      break;
   }
 }
 
@@ -772,6 +880,7 @@ function rollMyDie() {
 function animateRoll(val, cb) {
   const c = document.getElementById('rolling-die-container');
   c.innerHTML = '<div class="rolling-die">?</div>';
+  playSound('roll');
   let n = 0;
   const t = setInterval(() => {
     const el = c.querySelector('.rolling-die');
@@ -823,6 +932,7 @@ function placeInColumn(colIdx) {
   myTurn = false;
   removeHighlights();
   clearRollingDie();
+  playSound('place');
   cancelOppDice(colIdx, val);
   send({type:'placed', col:colIdx, value:val});
   send({type:'sync',   board:myBoard});
@@ -842,7 +952,12 @@ function oppPlaced(colIdx, val) {
   if (!checkWin()) setTimeout(rollMyDie, 500);
 }
 
-function cancelOppDice(ci, v) { oppBoard[ci] = oppBoard[ci].map(d => d===v?null:d); compactCol(oppBoard[ci]); }
+function cancelOppDice(ci, v) {
+  const removed = oppBoard[ci].some(d => d === v);
+  oppBoard[ci] = oppBoard[ci].map(d => d===v?null:d);
+  compactCol(oppBoard[ci]);
+  if (removed) playSound('cancel');
+}
 function cancelMyDice(ci, v)  { myBoard[ci]  = myBoard[ci].map(d => d===v?null:d);  compactCol(myBoard[ci]);  }
 function compactCol(col) { const vals=col.filter(v=>v!==null); for(let i=0;i<ROWS;i++) col[i]=vals[i]??null; }
 
@@ -869,6 +984,7 @@ function checkWin() {
     document.getElementById('winner-text').textContent   = winner;
     document.getElementById('winner-scores').textContent = `${myName}: ${ms}  •  ${oppName}: ${os}`;
     document.getElementById('winner-overlay').classList.add('active');
+    if (ms !== os) playSound(ms > os ? 'win' : 'lose');
   }, 600);
   return true;
 }
@@ -950,6 +1066,19 @@ function backToLobby() {
 function resetGame() {
   document.getElementById('winner-overlay').classList.remove('active');
   backToLobby();
+}
+
+function requestRematch() {
+  rematchRequestedByMe = true;
+  document.getElementById('rematch-status').textContent = 'Aguardando ' + oppName + '...';
+  send({type: 'rematch-request'});
+}
+
+function acceptRematch() {
+  send({type: 'rematch-accept'});
+  document.getElementById('winner-overlay').classList.remove('active');
+  rematchRequestedByMe = false;
+  startGame(!isHost);
 }
 
 function showToast(msg) {
