@@ -3072,6 +3072,20 @@
         backToLobby();
       }
       function requestRematch() {
+        if (botMode) {
+          // no opponent to ask — just restart immediately
+          document.getElementById("winner-overlay").classList.remove("active");
+          document.getElementById("rematch-status").textContent = "";
+          rematchRequestedByMe = false;
+          initBoards();
+          myTurn = true;
+          currentDie = null;
+          showScreen("game");
+          renderBoards();
+          updateTurnUI();
+          setTimeout(rollMyDie, 600);
+          return;
+        }
         rematchRequestedByMe = true;
         document.getElementById("rematch-status").textContent =
           "Aguardando " + oppName + "...";
